@@ -1,0 +1,16 @@
+asyncpg==0.20.1
+fastapi==0.89.1
+uvicorn==0.29.0
+httpx==0.27.0
+pandas==2.0.1
+numpy==1.21.6
+requests==2.28.1
+python-dotenv==0.21.1
+fastapi-responses==0.2.1
+pytest==7.2.2
+gunicorn==20.1.0 
+langchain==0.2.0
+openai==1.30.1
+langchain_openai==0.1.7
+langchain-community==0.2.0
+numexpr==2.10.0

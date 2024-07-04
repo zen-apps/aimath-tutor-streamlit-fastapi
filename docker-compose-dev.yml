@@ -1,0 +1,29 @@
+version: '3.1'
+
+services:
+  fast_api_backend:
+    restart: always
+    build: 
+      context: ./fast_api
+      dockerfile: Dockerfile
+    env_file:
+      - ./config/dev.env
+    volumes:
+      - ./:/app
+    ports:
+      - 1001:8000
+    command: ["--host", "0.0.0.0", "fast_api.app.main:app", "--reload"]
+
+  streamlit_frontend:
+    image: streamlit
+    build: 
+        context: ./streamlit
+        dockerfile: Dockerfile
+    restart: always
+    env_file:
+    - ./config/dev.env
+    command: "streamlit run streamlit/🏠_home.py"
+    ports:
+        - 8511:8501
+    volumes:
+        - ./streamlit:/usr/src/app
