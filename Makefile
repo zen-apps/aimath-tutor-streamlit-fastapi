@@ -1,7 +1,7 @@
 VERSION := 0.0.1
-BE_IMAGE_NAME := ai-tutor-streamlit-fastapi_fast_api_backend_1
+BE_IMAGE_NAME := aimath-tutor-streamlit-fastapi_fast_api_backend_1
 DOCKER_COMPOSE_FILE  := docker-compose-dev.yml 
-FE_IMAGE_NAME := ai-tutor-streamlit-fastapi_streamlit_frontend_1
+FE_IMAGE_NAME := aimath-tutor-streamlit-fastapi_streamlit_frontend_1
 BACKUP_DATE := $(shell date +%m_%d_%y)
 
 up: 

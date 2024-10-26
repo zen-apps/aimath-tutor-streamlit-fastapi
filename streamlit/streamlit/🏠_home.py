@@ -12,7 +12,8 @@ def run_llm_api_get_key_concepts(user_dict: dict):
     prompt = "not used"
     llm_response = getting_key_math_concepts(question=prompt, user_dict=user_dict)
     grade = user_dict["grade"]
-    resp_dict = json.loads(llm_response["output"])
+    st.write(llm_response["retrieval_response"])
+    resp_dict = json.loads(llm_response["retrieval_response"])
 
     concept_radio = st.radio(
         f"Select Concept for grade {grade}",

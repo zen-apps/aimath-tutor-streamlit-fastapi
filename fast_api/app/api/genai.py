@@ -21,57 +21,44 @@ from langchain.agents import create_openai_functions_agent, AgentExecutor
 genai = APIRouter()
 
 
+class MathConcepts(BaseModel):
+    concept_name: str = Field(description="The name of the math learning concept")
+    concept_description: str = Field(
+        description="A short description of the math learning concept"
+    )
+
+
 # step 1 what are key math concepts
+def get_key_concepts_template():
+    template = """List 5 key math concepts for {grade} grade student to understand."""
+    return template
+
+
 @genai.post("/ai_chat_get_key_concepts/")
 async def ai_chat_get_key_concepts(query: dict) -> Response:
     """Chat with the Agent AI."""
     OPENAPI_KEY = os.getenv("OPENAI_API_KEY")
     llm = ChatOpenAI(api_key=OPENAPI_KEY, model="gpt-4o", temperature=0.0)
+    print("in ai_chat_get_key_concepts")
 
     user_dict = query["user_dict"]
     user_dict = json.loads(user_dict)
 
     grade = user_dict["grade"]
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                "List 5 key math concepts for {grade} grade student to understand. \nFormatting Instructions: {format_instructions}",
-            ),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ]
-    )
 
-    problem_chain = LLMMathChain.from_llm(llm=llm)
-    math_tool = Tool.from_function(
-        name="Calculator",
-        func=problem_chain.run,
-        description="Useful for when you need to answer questions about math.  Only use this tool with numbers.  This tool is only for math questions and nothing else. Only input math expressions.",
-    )
+    math_concepts_template = get_key_concepts_template()
+    math_concepts_filled_in = math_concepts_template.format(**{"grade": grade})
 
-    tools = [math_tool]
-    agent = create_openai_functions_agent(llm=llm, prompt=prompt, tools=tools)
-    agentExecutor = AgentExecutor(
-        agent=agent, tools=tools, verbose=True, return_intermediate_steps=True
-    )
+    structured_llm = llm.with_structured_output(MathConcepts)
+    response = structured_llm.invoke(math_concepts_filled_in)
+    print("response:", response)
+    # Convert response to dictionary
+    response_dict = response.dict()
 
-    class MathConcepts(BaseModel):
-        concept_name: str = Field(description="The name of the math learning concept")
-        concept_description: str = Field(
-            description="A short description of the math learning concept"
-        )
-
-    parser = JsonOutputParser(pydantic_object=MathConcepts)
-
-    q1 = {
-        "grade": grade,
-        "format_instructions": parser.get_format_instructions(),
+    output_dict = {
+        "retrieval_response": response_dict,
     }
-    response = agentExecutor.invoke(q1)
-    return Response(
-        json.dumps(llm_tools.build_json_sierializable(response)),
-        media_type="application/json",
-    )
+    return Response(json.dumps(output_dict), media_type="application/json")
 
 
 # step 2 generate a question
