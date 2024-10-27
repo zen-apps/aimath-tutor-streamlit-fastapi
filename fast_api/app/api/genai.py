@@ -1,6 +1,7 @@
 import os
 import json
 from fastapi import APIRouter, Response
+from typing import List
 import app.helpers.llm_tools as llm_tools
 from langchain_openai import ChatOpenAI
 from langchain.prompts import (
@@ -22,9 +23,11 @@ genai = APIRouter()
 
 
 class MathConcepts(BaseModel):
-    concept_name: str = Field(description="The name of the math learning concept")
-    concept_description: str = Field(
-        description="A short description of the math learning concept"
+    concept_name: List[str] = Field(
+        description="The names of the math learning concepts"
+    )
+    concept_description: List[str] = Field(
+        description="Short descriptions of the math learning concepts"
     )
 
 
