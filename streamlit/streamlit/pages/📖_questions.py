@@ -30,14 +30,9 @@ def get_quetion(session_id, user_dict, concept_dict):
         user_dict=user_dict,
         math_info=concept_dict,
     )
-    output = llm_response["output"]
 
-    if "```json" not in output:
-        resp = json.loads(output)
-    else:
-        output_cleaned = output.replace("```json", "").replace("```", "")
-        resp = json.loads(output_cleaned)
-    return resp
+    output = llm_response["retrieval_response"]
+    return output
 
 
 if len(user_dict) == 0:
