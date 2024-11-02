@@ -22,7 +22,7 @@ The backend implements a sophisticated state machine using LangGraph that follow
 3. Answer Validation: Verifies that multiple choice options include a correct answer
 4. State Management: Tracks the entire process including any necessary revisions
 
-![Workflow Graph](screenshots/workflow_graph.png)
+<img src="screenshots/workflow_graph.png" width="25%" />
 
 ### Key Benefits of LangGraph Implementation
 
