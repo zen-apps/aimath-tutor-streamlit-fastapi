@@ -5,7 +5,7 @@ import json
 
 
 # step 1
-@st.cache_data()
+@st.cache_data(ttl=24 * 24 * 1)
 def getting_key_math_concepts(question: str, user_dict: dict) -> dict:
     """Chat with the AI."""
     BACKEND_HOST = os.getenv("BACKEND_HOST")

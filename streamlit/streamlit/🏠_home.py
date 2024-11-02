@@ -12,17 +12,14 @@ def run_llm_api_get_key_concepts(user_dict: dict):
     prompt = "not used"
     llm_response = getting_key_math_concepts(question=prompt, user_dict=user_dict)
     grade = user_dict["grade"]
-    resp_dict = json.loads(llm_response["output"])
-
-    concept_radio = st.radio(
-        f"Select Concept for grade {grade}",
-        [concept["concept_name"] for concept in resp_dict],
-    )
+    resp_dict = llm_response["retrieval_response"]
+    concept_radio = st.radio("Select a concept", resp_dict["concept_name"])
     concept_dict = {}
-    for concept in resp_dict:
-        if concept_radio == concept["concept_name"]:
-            concept_dict = concept
-            concept_dict["grade"] = grade
+
+    for i, concept in enumerate(resp_dict["concept_name"]):
+        if concept == concept_radio:
+            concept_dict["concept_name"] = concept
+            concept_dict["concept_description"] = resp_dict["concept_description"][i]
             break
     st.write(f":orange[{concept_dict['concept_description']}]")
     st.session_state["concept_dict"] = concept_dict
