@@ -9,6 +9,70 @@ This repository contains an AI-driven math tutor application built with Streamli
 - Answer questions related to the chosen math concept.
 - View hints for each question.
 
+## Backend Architecture
+
+The application uses LangGraph to create a reliable and controllable workflow for generating and validating math questions. LangGraph enables a structured approach to building AI agents while maintaining high reliability.
+
+### Question Generation Workflow
+
+The backend implements a sophisticated state machine using LangGraph that follows these steps:
+
+1. Initial Question Generation: Creates a math question based on grade level and concept
+2. Question Validation: Ensures the question is clear and contains all necessary information
+3. Answer Validation: Verifies that multiple choice options include a correct answer
+4. State Management: Tracks the entire process including any necessary revisions
+
+![Workflow Graph](screenshots/workflow_graph.png)
+
+### Key Benefits of LangGraph Implementation
+
+- **Reliability**: Structured workflow ensures consistent question generation and validation
+- **State Management**: Comprehensive tracking of the question generation process
+- **Debug Capability**: Clear visibility into each step of the workflow
+- **Human Oversight**: Message history tracking for review and improvement
+- **Error Handling**: Robust error recovery with automatic revision attempts
+
+## Technical Implementation
+
+### Backend Workflow
+
+The backend uses LangGraph's StateGraph to implement a sophisticated question generation and validation workflow:
+
+```python
+def create_question_workflow():
+    workflow = StateGraph(GraphState)
+
+    workflow.add_node("initial_question_answers", initial_question_answers)
+    workflow.add_node("review_question", review_question)
+    workflow.add_node("review_answer", review_answer)
+    workflow.add_node("summarize_output", summarize_output)
+
+    workflow.set_entry_point("initial_question_answers")
+    workflow.add_edge("initial_question_answers", "review_question")
+
+    workflow.add_conditional_edges(
+        source="review_question",
+        path=review_question_decision,
+        path_map={
+            "initial_question_answers": "initial_question_answers",
+            "review_answer": "review_answer",
+        },
+    )
+
+    workflow.add_conditional_edges(
+        source="review_answer",
+        path=review_answer_decision,
+        path_map={
+            "summarize_output": "summarize_output",
+            "initial_question_answers": "initial_question_answers",
+        },
+    )
+
+    workflow.add_edge("summarize_output", END)
+
+    return workflow.compile()
+```
+
 ## Installation
 
 To run the AI Assistant Math App locally using Docker and Make, follow these steps:
@@ -55,6 +119,7 @@ To run the AI Assistant Math App locally using Docker and Make, follow these ste
 
 ## Project Structure
 
+- `fast_api/app/api/genai.py`: LangGraph-powered backend for intelligent question generation and validation
 - `🏠_home.py`: Home page application file.
 - `pages/📖_questions.py`: Secondary page for presenting questions.
 - `utils/api_connector.py`: Contains functions for interacting with the AI API to get math concepts and questions.
