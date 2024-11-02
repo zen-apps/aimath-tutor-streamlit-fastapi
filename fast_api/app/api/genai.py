@@ -42,6 +42,7 @@ class GraphState(TypedDict):
     ai_confirmation_question: Optional[bool]
     ai_confirmation_answer: Optional[bool]
     revision_count: Optional[int]
+    message_history: Optional[List[str]]  # Added message_history
 
 
 MAX_REVISIONS = 5
@@ -80,6 +81,12 @@ async def ai_chat_get_key_concepts(query: dict) -> Response:
     return Response(json.dumps(output_dict), media_type="application/json")
 
 
+def get_question_template():
+    template = """You are a math teacher for {grade} grade. Your job is to provide a worded math problem according to this {math_concept}. Do not ask a question is similar to previous questions {question_history}.
+    RULES: ALL THE DETAILS TO SOLVE THE PROBLEM MUST BE INCLUDED IN THE PROBLEM NAME."""
+    return template
+
+
 def initial_question_answers(state: GraphState) -> GraphState:
     print("--------------------")
     print("Node: initial_question_answers")
@@ -88,13 +95,14 @@ def initial_question_answers(state: GraphState) -> GraphState:
     OPENAPI_KEY = os.getenv("OPENAI_API_KEY")
     llm = ChatOpenAI(api_key=OPENAPI_KEY, model="gpt-4", temperature=0.0)
 
-    math_problem_template = """You are a math teacher for {grade} grade. Your job is to provide a worded math problem according to this {math_concept}. 
-    RULES: ALL THE DETAILS TO SOLVE THE PROBLEM MUST BE INCLUDED IN THE PROBLEM NAME."""
+    math_problem_template = get_question_template()
 
     structured_llm = llm.with_structured_output(MathProblem)
     response = structured_llm.invoke(
         math_problem_template.format(
-            grade=state["grade"], math_concept=state["math_subject"]
+            grade=state["grade"],
+            math_concept=state["math_subject"],
+            question_history=state["question_history"],
         )
     )
 
@@ -108,8 +116,19 @@ def initial_question_answers(state: GraphState) -> GraphState:
     state["ai_confirmation_answer"] = None
     state["revision_count"] = 0
 
+    # Initialize or update message history
+    if state.get("message_history") is None:
+        state["message_history"] = []
+
+    # Add initial question generation to history
+    state["message_history"].append(
+        f"Generated Question: {response.problem_name}\n"
+        + f"Generated Answers: {response.multiple_choice}"
+    )
+
     print(f"Generated question: {response.problem_name}")
     print(f"Generated answers: {response.multiple_choice}")
+    print(f"Message history length: {len(state['message_history'])}")
     return state
 
 
@@ -124,12 +143,24 @@ def review_question(state: GraphState) -> GraphState:
     if state["revision_count"] >= MAX_REVISIONS:
         print("Max revisions reached")
         state["ai_confirmation_question"] = False
+        state["message_history"].append(
+            "Maximum revision limit reached. Moving to final output."
+        )
         return state
 
     class ValidQuestion(BaseModel):
         valid_question: bool = Field(
             description="Does the question provide enough information to solve the problem?"
         )
+        feedback: str = Field(
+            description="Specific feedback about why the question is valid or invalid"
+        )
+
+    history_text = (
+        "\n".join(state["message_history"])
+        if state["message_history"]
+        else "No previous history"
+    )
 
     prompt = ChatPromptTemplate.from_messages(
         [
@@ -139,34 +170,53 @@ def review_question(state: GraphState) -> GraphState:
             ),
             (
                 "human",
-                "Review this math question: {question}. Does it provide all necessary information to solve the problem?",
+                """Previous attempts and feedback:
+{history}
+
+Current question to review: {question}
+
+Does this question provide all necessary information to solve the problem? 
+If not, explain what's missing or unclear.""",
             ),
         ]
     )
 
     chain = prompt | llm.with_structured_output(ValidQuestion)
-    response = chain.invoke({"question": state["initial_question"]})
+    response = chain.invoke(
+        {"question": state["initial_question"], "history": history_text}
+    )
 
     state["ai_confirmation_question"] = response.valid_question
+    state["message_history"].append(
+        f"Question Review:\n"
+        + f"Valid: {response.valid_question}\n"
+        + f"Feedback: {response.feedback}"
+    )
+
     if response.valid_question:
         state["final_question"] = state["initial_question"]
     else:
         state["revision_count"] += 1
 
     print(f"Question validation result: {response.valid_question}")
+    print(f"Feedback: {response.feedback}")
     print(f"Revision count: {state['revision_count']}")
     return state
 
 
-def review_answer(state: GraphState) -> GraphState:
-    print("--------------------")
-    print("Node: review_answer")
-    print(f"Current state: {state}")
-
+def validate_question_with_langgraph(question_answers_dict: dict):
     OPENAPI_KEY = os.getenv("OPENAI_API_KEY")
     llm = ChatOpenAI(api_key=OPENAPI_KEY, model="gpt-4", temperature=0.0)
-    llm_math = LLMMathChain.from_llm(llm=llm)
 
+    try:
+        question = question_answers_dict["problem_name"]
+        possible_answers = question_answers_dict["multiple_choice"]
+        history = question_answers_dict.get("history", "No previous history")
+    except KeyError as e:
+        print(f"Error accessing question data: {e}")
+        raise
+
+    llm_math = LLMMathChain.from_llm(llm=llm)
     word_problem_tool = Tool(
         name="MathReasoningTool",
         func=llm_math.run,
@@ -187,51 +237,88 @@ def review_answer(state: GraphState) -> GraphState:
             ("system", "You are a teacher validating math problem answers."),
             (
                 "human",
-                """Question: {question}
-        Possible answers: {answers}
-        Please validate each answer and indicate which ones are correct.""",
+                """Previous history:
+{history}
+
+Question: {question}
+Possible answers: {answers}
+Please validate each answer and indicate which ones are correct.""",
             ),
         ]
     )
 
     chain = prompt | llm_with_tools.with_structured_output(MathQuestion)
     response = chain.invoke(
-        {
-            "question": state["initial_question"],
-            "answers": state["initial_possible_answers"],
+        {"question": question, "answers": possible_answers, "history": history}
+    )
+
+    validation_results = {
+        "answer_1": response.answer_1,
+        "answer_2": response.answer_2,
+        "answer_3": response.answer_3,
+        "answer_4": response.answer_4,
+    }
+
+    if not any(validation_results.values()):
+        print("Warning: No correct answers found in validation")
+
+    return validation_results
+
+
+def review_answer(state: GraphState) -> GraphState:
+    print("--------------------")
+    print("Node: review_answer")
+    print(f"Current state: {state}")
+
+    try:
+        question = state["initial_question"]
+        possible_answers = state["initial_possible_answers"]
+        history_text = (
+            "\n".join(state["message_history"])
+            if state["message_history"]
+            else "No previous history"
+        )
+
+        question_answers_dict = {
+            "problem_name": question,
+            "multiple_choice": possible_answers,
+            "history": history_text,
         }
-    )
 
-    # Check if at least one answer is correct
-    state["ai_confirmation_answer"] = any(
-        [response.answer_1, response.answer_2, response.answer_3, response.answer_4]
-    )
+        validation_dict = validate_question_with_langgraph(question_answers_dict)
+        print("validation from math agent", validation_dict)
 
-    print(
-        f"Answer validation results: {[response.answer_1, response.answer_2, response.answer_3, response.answer_4]}"
-    )
-
-    if state["ai_confirmation_answer"]:
-        state["final_possible_answers"] = state["initial_possible_answers"]
-        correct_index = [
-            i
-            for i, is_correct in enumerate(
-                [
-                    response.answer_1,
-                    response.answer_2,
-                    response.answer_3,
-                    response.answer_4,
+        state["ai_confirmation_answer"] = False
+        for idx, (answer_key, is_correct) in enumerate(validation_dict.items(), 1):
+            if is_correct:
+                state["ai_confirmation_answer"] = True
+                state["final_possible_answers"] = state["initial_possible_answers"]
+                state["final_correct_answer"] = state["initial_possible_answers"][
+                    idx - 1
                 ]
+                if not state["final_question"]:
+                    state["final_question"] = state["initial_question"]
+
+                state["message_history"].append(
+                    f"Answer validation successful:\n"
+                    + f"Correct answer found: {state['final_correct_answer']}"
+                )
+                print(f"Found correct answer: {state['final_correct_answer']}")
+                break
+
+        if not state["ai_confirmation_answer"]:
+            print("No correct answer found")
+            state["revision_count"] = state.get("revision_count", 0) + 1
+            state["message_history"].append(
+                "No correct answer found in current options. Requesting revision."
             )
-            if is_correct
-        ][0]
-        state["final_correct_answer"] = state["initial_possible_answers"][correct_index]
-        if not state["final_question"]:  # Ensure final_question is set
-            state["final_question"] = state["initial_question"]
-        print(f"Found correct answer: {state['final_correct_answer']}")
-    else:
-        state["revision_count"] += 1
-        print("No correct answer found. Incrementing revision count.")
+
+    except Exception as e:
+        error_msg = f"Error validating answer: {e}"
+        print(error_msg)
+        state["revision_count"] = state.get("revision_count", 0) + 1
+        state["ai_confirmation_answer"] = False
+        state["message_history"].append(error_msg)
 
     return state
 
@@ -269,17 +356,31 @@ def summarize_output(state: GraphState) -> Dict:
     print("Node: summarize_output")
     print(f"Final state: {state}")
 
-    # Return all state fields directly
+    final_question = state.get("final_question") or state.get("initial_question")
+    final_possible_answers = state.get("final_possible_answers") or state.get(
+        "initial_possible_answers"
+    )
+
+    state["message_history"].append(
+        f"Final Output:\n"
+        + f"Question: {final_question}\n"
+        + f"Answers: {final_possible_answers}\n"
+        + f"Correct Answer: {state.get('final_correct_answer')}\n"
+        + f"Total Revisions: {state.get('revision_count', 0)}"
+    )
+
     return {
+        "final_question": final_question,
+        "final_possible_answers": final_possible_answers,
+        "final_correct_answer": state.get("final_correct_answer"),
+        "revision_count": state.get("revision_count", 0),
         "initial_question": state.get("initial_question"),
         "initial_possible_answers": state.get("initial_possible_answers"),
-        "final_question": state.get("final_question") or state.get("initial_question"),
-        "final_possible_answers": state.get("final_possible_answers")
-        or state.get("initial_possible_answers"),
-        "final_correct_answer": state.get("final_correct_answer"),
         "ai_confirmation_question": state.get("ai_confirmation_question"),
         "ai_confirmation_answer": state.get("ai_confirmation_answer"),
-        "revision_count": state.get("revision_count", 0),
+        "grade": state.get("grade"),
+        "math_subject": state.get("math_subject"),
+        "message_history": state.get("message_history", []),
     }
 
 
@@ -361,6 +462,7 @@ async def ai_chat_agent_get_question(query: dict) -> Response:
             "ai_confirmation_question": result.get("ai_confirmation_question", False),
             "ai_confirmation_answer": result.get("ai_confirmation_answer", False),
             "revision_count": result.get("revision_count", 0),
+            "message_history": result.get("message_history", []),
         },
     }
 
