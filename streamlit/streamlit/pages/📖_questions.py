@@ -30,6 +30,7 @@ def get_quetion(session_id, user_dict, concept_dict):
         user_dict=user_dict,
         math_info=concept_dict,
     )
+    st.write(llm_response)
 
     output = llm_response["retrieval_response"]
     return output
