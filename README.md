@@ -2,6 +2,10 @@
 
 This repository contains an AI-driven math tutor application built with Streamlit. The app helps users practice math concepts by providing questions based on their grade level and offering feedback on their answers.
 
+## Demo Video
+Watch a walkthrough of the application features and architecture:
+[AI Math Tutor Youtube Demo](https://youtu.be/0AF59uxAPHk)
+
 ## Features
 
 - Select grade level from pre-K to 12th grade.
