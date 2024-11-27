@@ -4,7 +4,7 @@ This repository contains an AI-driven math tutor application built with Streamli
 
 ## Demo Video
 Watch a walkthrough of the application features and architecture:
-[AI Math Tutor Youtube Demo]([https://www.youtube.com/watch?v=YOUR_VIDEO_ID](https://youtu.be/0AF59uxAPHk))
+[AI Math Tutor Youtube Demo](https://youtu.be/0AF59uxAPHk)
 
 ## Features
 
